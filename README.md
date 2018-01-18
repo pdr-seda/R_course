@@ -1,1 +1,1 @@
-# R_course
+# R_programming_course
