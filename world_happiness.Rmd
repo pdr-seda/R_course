@@ -1,0 +1,249 @@
+---
+title: "World Happiness Report"
+author: "Seda"
+date: "1/1/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary  
+
+The [World Happiness Report](https://www.kaggle.com/unsdsn/world-happiness) is downloaded from www.kaggle.com. Happiness scored according to 6 factors - `economic production`, `social support`, `life expectancy`, `freedom`, `absence of corruption`, and `generosity`. 
+
+```{r import data, include=FALSE}
+library(tidyverse)
+library(knitr) # nice table
+library(plotly) # interactive plot
+library(psych) # corr.test()
+library(lattice) # xyplot
+library(ggfortify) # 6 diff residual diagnostic plots
+
+# read data
+happy_2015 <- read_csv("~/Desktop/Seda_final/world-happiness-report/2015.csv")
+```
+
+## Description and EDA  
+
+The happiness survey asked the Cantril ladder question that requests participants to think of a ladder with the best possible life for them being a 10 and the worst possible life being a 0 and to rate their own current lives on that scale. I'm interested in: (1) the overall differences between Western Europe and Middle East and Northern Africa in 2015 (see table 1 and table 2). (2) the relationship between economy and happiness score (see scatterplot)
+
+
+```{r Description and EDA, echo=FALSE}
+
+#1 generate the descriptives table using dplyr and tidyr functions, and kable
+  # Western Europe
+happy_2015 %>%
+  filter(Region == "Western Europe") %>% 
+  select(`Happiness Rank`:`Dystopia Residual`) %>% 
+  gather("Variable", "value") %>% 
+  group_by(Variable) %>% 
+  summarise(Mean=mean(value, na.rm=TRUE), 
+            SD=sd(value, na.rm=TRUE), 
+            min=min(value, na.rm=TRUE), 
+            max=max(value, na.rm=TRUE), 
+            '% Missing'=100*length(which(is.na(value)))/n()) %>% 
+  kable(digits=2, format="pandoc", caption="Table 1: Descriptive Statistics for Observed Variables in Western Europe")
+
+  # Middle East and Northern Africa
+happy_2015 %>%
+  filter(Region == "Middle East and Northern Africa") %>% 
+  select(`Happiness Rank`:`Dystopia Residual`) %>% 
+  gather("Variable", "value") %>% 
+  group_by(Variable) %>% 
+  summarise(Mean=mean(value, na.rm=TRUE), 
+            SD=sd(value, na.rm=TRUE), 
+            min=min(value, na.rm=TRUE), 
+            max=max(value, na.rm=TRUE), 
+            '% Missing'=100*length(which(is.na(value)))/n()) %>% 
+  kable(digits=2, format="pandoc", caption="Table 2: Descriptive Statistics for Observed Variables in Middle East and Northern Africa")
+
+#2 scatterplot - relationship between economy and happiness score
+
+p <- happy_2015 %>%
+  ggplot() +
+  aes(x =`Economy (GDP per Capita)`, y = `Happiness Score`, color = Region, size = `Generosity`, label = Country) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = 'lm', color = 'black', se = FALSE) + # se = FALSE remove 95% CI
+  theme_bw() # remove the background
+
+plotly::ggplotly(p) # making it more interactive 
+
+#3 scatterplot - relationship between Health (Life Expectancy) and happiness score
+happy_2015 %>%
+  ggplot() +
+  aes(x =`Health (Life Expectancy)`, y = `Happiness Score`, color = Region, size = `Freedom`, label = Country) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = 'lm', color = 'black') + 
+  theme_bw() 
+
+```
+
+## Hypotheses and Statistical Analysis  
+
+### Group Comparison  
+**Hypothesis**:  
+
+H0: Happiness scores between `Western Europe` and `Middle East and Northern Africa` have no differences.  
+H1: Happiness scores between `Western Europe` and `Middle East and Northern Africa` are statistically different.
+
+**Normality test**
+
+```{r normality test, echo=FALSE}
+# filter out two intested groups: Western Europe and Middle East and Northern Africa
+t_data <- happy_2015 %>% 
+  filter(Region %in% c("Western Europe","Middle East and Northern Africa"))
+
+# normality check for two groups' happy score
+with(happy_2015, shapiro.test(`Happiness Score`[Region == "Western Europe"])) # p = 0.03
+with(happy_2015, shapiro.test(`Happiness Score`[Region == "Middle East and Northern Africa"])) # p = 0.7
+```
+
+One group is normally distributed, the other is not, so group comparison will use unpaired two-samples Wilcoxon test.
+
+**Homogeneity in Variances Check**  
+
+Do the two populations have the same variances?  
+
+```{r homogeneity in variances check, echo=FALSE}
+# homogeneity in variances check: do the two populations have the same variances?
+var.test(`Happiness Score` ~ Region, data = t_data) # p > .05, no significant difference between the variances of the two sets of data 
+```
+
+There's no significant differences between the variances of the two sets of data (p > .05).    
+
+**Wilcoxon Test**
+
+```{r group comparison, echo=FALSE}
+# Western Europe's happy score is not normal distributed -> use unpaired two-samples Wilcoxon test
+t <- wilcox.test(`Happiness Score` ~ Region, data = t_data, exact = FALSE)
+broom::tidy(t) 
+
+# visualize the results
+boxplot(`Happiness Score` ~ Region, data = t_data, main="Happiness Differences between Two Regions", 
+  	xlab="Region", ylab="Happiness Score")
+```
+
+`Western Europe`'s happiness score is significantly different from `Middle East and Northern Africa`'s score (p < .001).
+
+
+### Correlation   
+
+**Normality Test**
+
+```{r Normality Test, echo=FALSE}
+# normaity check: life expectancy
+hist(happy_2015$`Health (Life Expectancy)`, col = "lightgreen", main = "Histogram of Health (Life Expectancy)", xlab = "Health (Life Expectancy)")
+shapiro.test(happy_2015$`Health (Life Expectancy)`) # reject null hypothesis, health is not normally distributed
+
+# normaity check: economy
+hist(happy_2015$`Economy (GDP per Capita)`, col = "lightblue", main = "Histogram of Economy (GDP per Capita)", xlab = "Economy (GDP per Capita)")
+shapiro.test(happy_2015$`Economy (GDP per Capita)`) # not normal
+```
+
+Both `Health (Life Expectancy)` and `Economy (GDP per Capita)` is not normally distributed (p<.001). Data needs to be transformed.
+
+**Kendall Correlation**
+
+```{r correlation, echo = FALSE}
+# transform non-normal distribution
+cor_data <- happy_2015 %>%
+  transmute(`Happiness Score` = `Happiness Score`, log_health = log(`Health (Life Expectancy)`), log_economy = log(`Economy (GDP per Capita)`))
+
+# correlation matrix
+cor_data %>%
+  corr.test(method = "kendall") %>% 
+  print(short = FALSE)
+
+# get p-value
+cor.test(cor_data$`Happiness Score`, cor_data$log_health, method = "kendall")
+cor.test(cor_data$`Happiness Score`, cor_data$log_economy, method = "kendall")
+
+```
+
+Kendall correlation indicated a moderately strong significant positive relationship between `Happiness Score` and `Health(life expectancy)` (r = .55 [95% CI: .44; .65], N = 158, p < .001), and similar significant positive relationship between `Happiness Score` and `Economy (GDP per Captica)` (r = .59 [95% CI: .48; .69] N = 158, p < .001).
+
+
+### Linear Regression  
+
+A simple linear regression was run to investigate the degree to which `Health (Life Expectancy)` predicts `Happiness Score`.
+
+```{r simple linear regression, echo=FALSE, results = "asis"}
+# model fitting
+reg <- lm(`Happiness Score` ~ `Health (Life Expectancy)`, data = happy_2015)
+stargazer::stargazer(reg, type = "html", title = "Table 3: Regression Results")
+```
+
+A significant regression equation was found (F(1,156) = 172.05, p < .001), with an R^2 of 0.52. Participants' predicted `Happiness Score` is equal to 3.26 + 3.36 (`Health (Life Expectancy)`). Participants' happiness score increased 3.36 for each unit of `Health (Life Expectancy)`. 
+
+**Residual Diagnostics Plots**    
+
+Let's take a look at some plots of residual diagnostics. 
+
+```{r residual diagnostics, echo=FALSE}
+# residual diagnostics plot
+xyplot(resid(reg) ~ fitted(reg),
+  xlab = "Fitted Values",
+  ylab = "Residuals",
+  main = "Residual Diagnostic Plot",
+  panel = function(x, y, ...)
+  {
+    panel.grid(h = -1, v = -1)
+    panel.abline(h = 0)
+    panel.xyplot(x, y, ...)
+  }
+)
+```
+
+A solid horizontal line distinguishes between positive and negative residuals, and roughly checking, they are equally scattered from both sides.  
+
+```{r QQ-plot, echo=FALSE}
+#  normal probability plot - QQ plot
+qqmath( ~ resid(reg),
+  xlab = "Theoretical Quantiles",
+  ylab = "Residuals"
+)
+```
+
+Quantile-Quantile plot seems approaching a straight line (normal distribution), which supports the linear model assumption about the distribution of the residuals.  
+
+```{r more plots, echo=FALSE}
+# 6 different diagnostic plots
+autoplot(reg, which = 1:6, label.size = 5)
+```
+
+**Normality test on residuals**
+```{r shapiro.test, echo=FALSE}
+# normality test on residuals
+shapiro.test(resid(reg)) # not normal
+```
+
+With a p-value < .05, residuals are not normal distributed. 
+
+
+##Conclusion 
+
+1. **Description and EDA**: (1) two tables displayed some descriptive statistics for two regions, Western Europe and Middle East and Northern Africa. Some differences waited for further analysis. (2) Both two scatter plots showed linear relations between `Happiness Score` and `Economy (GDP per Capital)`, and `Happiness Score` and `Health (Life Expectancy)`.
+
+2. **Group comparison and correlation analysis**: (1) `Western Europe`’s happiness score is significantly different from `Middle East and Northern Africa`’s score (p < .001). (2) There are moderately strong significant positive relationships between `Happiness Score` and `Economy (GDP per Capital)`, and `Happiness Score` and `Health (Life Expectancy)`.  
+
+3. **Linear regression**: `Health (Life Expectancy)` is a significant predictor on `Happiness Score`. All the residuals diagnotistic plots seem ok, but based on Shapiro test, residuals are not normally distributed. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
