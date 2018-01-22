@@ -20,9 +20,11 @@ library(plotly) # interactive plot
 library(psych) # corr.test()
 library(lattice) # xyplot
 library(ggfortify) # 6 diff residual diagnostic plots
+library(rworldmap)
+library(dotCall64) # plotting worldmap
 
 # read data
-happy_2015 <- read_csv("~/Desktop/Seda_final/world-happiness-report/2015.csv")
+happy_2015 <- read_csv("~/Desktop/R_course/2015.csv")
 ```
 
 ## Description and EDA  
@@ -77,7 +79,6 @@ happy_2015 %>%
   geom_point(alpha = 0.4) +
   geom_smooth(method = 'lm', color = 'black') + 
   theme_bw() 
-
 ```
 
 ## Hypotheses and Statistical Analysis  
