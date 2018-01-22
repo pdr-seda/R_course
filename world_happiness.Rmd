@@ -2,7 +2,9 @@
 title: "World Happiness Report"
 author: "Seda"
 date: "1/1/2018"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -63,14 +65,14 @@ happy_2015 %>%
 
 #2 scatterplot - relationship between economy and happiness score
 
-p <- happy_2015 %>%
+happy_2015 %>%
   ggplot() +
   aes(x =`Economy (GDP per Capita)`, y = `Happiness Score`, color = Region, size = `Generosity`, label = Country) +
   geom_point(alpha = 0.4) +
   geom_smooth(method = 'lm', color = 'black', se = FALSE) + # se = FALSE remove 95% CI
   theme_bw() # remove the background
 
-plotly::ggplotly(p) # making it more interactive 
+#plotly::ggplotly(p) # making it more interactive 
 
 #3 scatterplot - relationship between Health (Life Expectancy) and happiness score
 happy_2015 %>%
